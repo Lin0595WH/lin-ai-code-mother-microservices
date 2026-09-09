@@ -15,6 +15,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <org.mapstruct.version>1.6.3</org.mapstruct.version>
     </properties>
 
     <dependencies>
@@ -22,6 +23,13 @@
             <groupId>com.lin</groupId>
             <artifactId>lin-ai-code-common</artifactId>
             <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- 用mapstruct做实体与 VO 转换-->
+        <!-- https://mapstruct.org/-->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${org.mapstruct.version}</version>
         </dependency>
     </dependencies>
 
