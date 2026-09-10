@@ -5,6 +5,7 @@ import com.lin.linaicodemother.model.entity.User;
 import com.lin.linaicodemother.model.vo.LoginUserVO;
 import com.lin.linaicodemother.model.vo.UserVO;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.NullValueMappingStrategy;
 
 import java.util.List;
@@ -32,7 +33,9 @@ public interface UserModuleMapper {
     /**
      * 单个 User 转 LoginUserVO
      * （字段名完全一致时，MapStruct 会自动映射，无需手动指定）
+     * loginTime 由 Service 层在登录成功后手动设置，这里忽略自动映射
      */
+    @Mapping(target = "loginTime", ignore = true)
     LoginUserVO userToLoginUserVO(User user);
 
 }
