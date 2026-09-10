@@ -1,3 +1,6 @@
+### 忽略我的本地配置项 ###
+application-local.yml
+
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

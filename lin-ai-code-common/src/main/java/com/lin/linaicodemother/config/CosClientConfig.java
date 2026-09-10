@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Data
 @Configuration
+@ConfigurationProperties(prefix = "cos.client")
 @ConditionalOnProperty(
         prefix = "cos.client",
         name = {"host", "secretId", "secretKey", "region", "bucket"}
