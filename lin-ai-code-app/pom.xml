@@ -87,12 +87,6 @@
             <artifactId>lin-ai-code-ai</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
-        <!-- 网页截图能力（内部服务接口 InnerScreenshotService 复用） -->
-        <dependency>
-            <groupId>com.lin</groupId>
-            <artifactId>lin-ai-code-screenshot</artifactId>
-            <version>1.0-SNAPSHOT</version>
-        </dependency>
     </dependencies>
 
 </project>
