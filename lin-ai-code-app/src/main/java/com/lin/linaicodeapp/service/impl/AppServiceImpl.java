@@ -35,6 +35,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -54,10 +55,13 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor(onConstructor = @__(@Lazy))
+@RequiredArgsConstructor
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
-    private final InnerUserService userService;
+    @DubboReference
+    private  InnerUserService userService;
+    @DubboReference
+    private  InnerScreenshotService screenshotService;
 
     private final AppModuleMapper appModuleMapper;
 
@@ -68,8 +72,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private final StreamHandlerExecutor streamHandlerExecutor;
 
     private final VueProjectBuilder vueProjectBuilder;
-
-    private final InnerScreenshotService screenshotService;
 
     private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 

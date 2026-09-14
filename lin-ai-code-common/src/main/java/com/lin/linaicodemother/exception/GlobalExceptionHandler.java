@@ -3,6 +3,7 @@ package com.lin.linaicodemother.exception;
 import cn.hutool.json.JSONUtil;
 import com.lin.linaicodemother.common.BaseResponse;
 import com.lin.linaicodemother.common.ResultUtils;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -14,8 +15,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.io.IOException;
 import java.util.Map;
 
-// @Hidden 解决knif4.0.0.版本跟@RestControllerAdvice冲突问题
 @Slf4j
+@Hidden //解决knif4.0.0.版本跟@RestControllerAdvice冲突问题
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
