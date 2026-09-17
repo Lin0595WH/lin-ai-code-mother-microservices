@@ -52,3 +52,5 @@ dubbo:
     timeout: 120000
   provider:
     timeout: 120000
+  application:
+    qos-enable: false

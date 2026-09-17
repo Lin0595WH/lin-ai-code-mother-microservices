@@ -20,7 +20,7 @@ spring:
     redis:
       host: localhost
       port: 6379
-      database: 1
+      database: 0
       password:
       ttl: 3600 #缓存过期时间（秒）
 server:
@@ -53,3 +53,5 @@ dubbo:
     timeout: 60000
   provider:
     timeout: 60000
+  application:
+    qos-enable: false
