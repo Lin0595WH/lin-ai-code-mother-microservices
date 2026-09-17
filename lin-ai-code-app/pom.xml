@@ -47,6 +47,7 @@
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
+            <version>7.1.0</version>
         </dependency>
         <!-- 数据访问 -->
         <dependency>
