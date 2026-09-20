@@ -121,7 +121,7 @@ public class AiCodeGeneratorServiceFactory {
                 yield AiServices.builder(AiCodeGeneratorService.class)
                         .streamingChatModel(reasoningStreamingChatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
-                        .tools(toolManager.getAllTools())
+                        .tools((Object[]) toolManager.getAllTools())
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                                 toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
                         ))
