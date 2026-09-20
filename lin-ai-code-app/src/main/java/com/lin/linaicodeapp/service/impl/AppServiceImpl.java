@@ -29,6 +29,7 @@ import com.lin.linaicodemother.model.enums.ChatHistoryMessageTypeEnum;
 import com.lin.linaicodemother.model.enums.CodeGenTypeEnum;
 import com.lin.linaicodemother.model.vo.AppVO;
 import com.lin.linaicodemother.model.vo.UserVO;
+import com.lin.linaicodeapp.service.AppCreationQuotaService;
 import com.lin.linaicodeapp.service.AppService;
 import com.lin.linaicodeapp.service.ChatHistoryService;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -74,6 +75,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private final VueProjectBuilder vueProjectBuilder;
 
     private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
+
+    private final AppCreationQuotaService appCreationQuotaService;
 
     /**
      * 通过对话生成应用代码
@@ -201,7 +204,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         RoutingResult routingResult = aiCodeGenTypeRoutingService.routing(initPrompt);
         CodeGenTypeEnum selectedCodeGenType = routingResult.getCodeGenTypeEnum();
         // 生成类型
-        String codeGenType = CharSequenceUtil.isBlank(selectedCodeGenType.getValue())
+        String codeGenType = selectedCodeGenType == null
                 ? CodeGenTypeEnum.HTML.getValue() : selectedCodeGenType.getValue();
         app.setCodeGenType(codeGenType);
         // 应用名称
@@ -210,9 +213,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 : routingResult.getAppName();
         app.setAppName(appName);
         // 插入数据库
-        boolean result = this.save(app);
+        boolean result = appCreationQuotaService.saveApp(app, loginUser);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), selectedCodeGenType.getValue());
+        log.info("应用创建成功，ID: {}, 类型: {}", app.getId(), codeGenType);
         return app.getId();
     }
 
