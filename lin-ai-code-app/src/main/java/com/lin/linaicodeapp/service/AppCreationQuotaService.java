@@ -37,13 +37,13 @@ public class AppCreationQuotaService {
      */
     public boolean saveApp(App app, User loginUser) {
         if (!UserRoleEnum.USER.getValue().equals(loginUser.getUserRole())) {
-            return appMapper.insert(app) == 1;
+            return appMapper.insertSelective(app) == 1;
         }
         RLock lock = redissonClient.getLock(APP_CREATION_LOCK_KEY.formatted(loginUser.getId()));
         ThrowUtils.throwIf(!lock.tryLock(), ErrorCode.TOO_MANY_REQUEST, "项目正在创建中，请勿重复提交");
         try {
             checkQuota(app);
-            return appMapper.insert(app) == 1;
+            return appMapper.insertSelective(app) == 1;
         } finally {
             lock.unlock();
         }
