@@ -1,10 +1,13 @@
 package com.lin.linaicodeapp.core.builder;
 
 
-import com.lin.linaicodemother.exception.BusinessException;
-import com.lin.linaicodemother.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @Author Lin
@@ -38,7 +41,50 @@ public class VueProjectBuilder {
      * @return 是否构建成功
      */
     public boolean buildProject(String projectPath) {
-        throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "Vue 项目构建暂时关闭");
+        if (projectPath == null || projectPath.isBlank()) {
+            return false;
+        }
+        File projectDir = new File(projectPath);
+        if (!projectDir.isDirectory() || !new File(projectDir, "package.json").isFile()) {
+            log.error("Vue 项目目录或 package.json 不存在：{}", projectPath);
+            return false;
+        }
+        String npm = isWindows() ? "npm.cmd" : "npm";
+        return execute(projectDir, List.of(npm, "install"), 300)
+                && execute(projectDir, List.of(npm, "run", "build"), 180)
+                && new File(projectDir, "dist").isDirectory();
+    }
+
+    private boolean execute(File workingDir, List<String> command, long timeoutSeconds) {
+        try {
+            Process process = new ProcessBuilder(command)
+                    .directory(workingDir)
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                process.descendants().forEach(child -> child.destroyForcibly());
+                process.destroyForcibly();
+                log.error("命令执行超时：{}", command);
+                return false;
+            }
+            if (process.exitValue() != 0) {
+                log.error("命令执行失败，退出码 {}：{}", process.exitValue(), command);
+                return false;
+            }
+            return true;
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            log.error("执行命令失败：{}", command, e);
+            return false;
+        }
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase().contains("windows");
     }
 
 }

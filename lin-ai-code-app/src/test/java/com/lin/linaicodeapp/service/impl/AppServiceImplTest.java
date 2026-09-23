@@ -2,6 +2,7 @@ package com.lin.linaicodeapp.service.impl;
 
 import com.lin.linaicodeapp.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.lin.linaicodeapp.core.AiCodeGeneratorFacade;
+import com.lin.linaicodeapp.core.builder.VueProjectBuilder;
 import com.lin.linaicodeapp.core.handler.StreamHandlerExecutor;
 import com.lin.linaicodeapp.service.AppCreationQuotaService;
 import com.lin.linaicodeapp.service.ChatHistoryService;
@@ -35,7 +36,7 @@ class AppServiceImplTest {
 
         AppServiceImpl service = new AppServiceImpl(mock(com.lin.linaicodemother.mapstruct.AppModuleMapper.class),
                 mock(AiCodeGeneratorFacade.class), mock(ChatHistoryService.class),
-                mock(StreamHandlerExecutor.class), routingFactory, quotaService);
+                mock(StreamHandlerExecutor.class), mock(VueProjectBuilder.class), routingFactory, quotaService);
         AppAddRequest request = new AppAddRequest();
         request.setInitPrompt("Build a Vue dashboard");
         User user = new User();

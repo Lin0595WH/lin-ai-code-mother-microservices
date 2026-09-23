@@ -6,11 +6,20 @@ import com.lin.linaicodemother.ai.AiCodeGeneratorService;
 import com.lin.linaicodeapp.ai.AiCodeGeneratorServiceFactory;
 import com.lin.linaicodemother.ai.model.HtmlCodeResult;
 import com.lin.linaicodemother.ai.model.MultiFileCodeResult;
+import com.lin.linaicodemother.ai.model.message.AiResponseMessage;
+import com.lin.linaicodemother.ai.model.message.ToolExecutedMessage;
+import com.lin.linaicodemother.ai.model.message.ToolRequestMessage;
+import com.lin.linaicodemother.constant.AppConstant;
+import com.lin.linaicodeapp.core.builder.VueProjectBuilder;
 import com.lin.linaicodeapp.core.parser.CodeParserExecutor;
 import com.lin.linaicodeapp.core.saver.CodeFileSaverExecutor;
 import com.lin.linaicodemother.exception.BusinessException;
 import com.lin.linaicodemother.exception.ErrorCode;
 import com.lin.linaicodemother.model.enums.CodeGenTypeEnum;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.service.tool.BeforeToolExecution;
+import dev.langchain4j.service.tool.ToolExecution;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +40,8 @@ public class AiCodeGeneratorFacade {
 
     private final AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
+    private final VueProjectBuilder vueProjectBuilder;
+
     /**
      * 统一入口：根据类型生成并保存代码
      *
@@ -42,9 +53,6 @@ public class AiCodeGeneratorFacade {
     public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "生成类型不能为空");
-        }
-        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
-            throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "Vue 项目生成暂时关闭");
         }
         // 根据 appId 获取相应的 AI 服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
@@ -76,9 +84,6 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "生成类型不能为空");
         }
-        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
-            throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "Vue 项目生成暂时关闭");
-        }
         // 根据 appId 获取相应的 AI 服务实例
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
@@ -90,12 +95,48 @@ public class AiCodeGeneratorFacade {
                 Flux<String> codeStream = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
                 yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, appId);
             }
-            case VUE_PROJECT -> throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "Vue 项目生成暂时关闭");
+            case VUE_PROJECT -> {
+                TokenStream tokenStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, userMessage);
+                yield processTokenStream(tokenStream, appId);
+            }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
             }
         };
+    }
+
+    /**
+     * 将 TokenStream 转换为 Flux<String>，并传递工具调用信息
+     *
+     * @param tokenStream TokenStream 对象
+     * @param appId       应用ID
+     * @return Flux<String> 流式响应
+     */
+    private Flux<String> processTokenStream(TokenStream tokenStream, Long appId) {
+        return Flux.create(sink -> tokenStream
+                .onPartialResponse((String partialResponse) -> {
+                    AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
+                    sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                })
+                .beforeToolExecution((BeforeToolExecution beforeToolExecution) -> {
+                    ToolRequestMessage toolRequestMessage = new ToolRequestMessage(beforeToolExecution);
+                    sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                })
+                .onToolExecuted((ToolExecution toolExecution) -> {
+                    ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
+                    sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                })
+                .onCompleteResponse((ChatResponse response) -> {
+                    String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
+                    vueProjectBuilder.buildProject(projectPath);
+                    sink.complete();
+                })
+                .onError(error -> {
+                    log.error("处理VUE_PROJECT模式下的tokenStream 出现异常：{}", error.getMessage());
+                    sink.error(error);
+                })
+                .start());
     }
 
     /**

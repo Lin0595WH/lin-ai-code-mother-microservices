@@ -12,6 +12,7 @@ import com.lin.linaicodeapp.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.lin.linaicodemother.ai.model.RoutingResult;
 import com.lin.linaicodemother.constant.AppConstant;
 import com.lin.linaicodeapp.core.AiCodeGeneratorFacade;
+import com.lin.linaicodeapp.core.builder.VueProjectBuilder;
 import com.lin.linaicodeapp.core.handler.StreamHandlerExecutor;
 import com.lin.linaicodemother.exception.BusinessException;
 import com.lin.linaicodemother.exception.ErrorCode;
@@ -71,6 +72,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     private final StreamHandlerExecutor streamHandlerExecutor;
 
+    private final VueProjectBuilder vueProjectBuilder;
+
     private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
     private final AppCreationQuotaService appCreationQuotaService;
@@ -103,9 +106,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "应用代码生成类型错误");
         }
-        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
-            throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "Vue 项目生成暂时关闭");
-        }
         // 5. 调用 AI 生成代码 先保存用户消息到数据库中
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         // 6. 调用 AI 生成代码（流式）
@@ -131,8 +131,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         // 3.权限校验:仅本人可以部署应用
         ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "无操作权限");
-        ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT.getValue().equals(app.getCodeGenType()),
-                ErrorCode.FORBIDDEN_ERROR, "Vue 项目部署暂时关闭");
         // 4.检查是否已有部署key
         // 没有就生成部署key(6位，字母+数字)
         String deployKey = app.getDeployKey();
@@ -147,6 +145,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!FileUtil.isDirectory(sourceDirPath)) {
             log.error("应用部署失败，应用代码路径{}不存在，请先生成应用:", sourceDirPath);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用部署失败，应用代码路径不存在，请先生成应用");
+        }
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+            ThrowUtils.throwIf(!vueProjectBuilder.buildProject(sourceDirPath),
+                    ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，请重试");
+            File distDir = new File(sourceDirPath, "dist");
+            ThrowUtils.throwIf(!distDir.isDirectory(), ErrorCode.SYSTEM_ERROR,
+                    "Vue 项目构建完成但未生成 dist 目录");
+            sourceDirPath = distDir.getAbsolutePath();
         }
         // 8.复制文件到部署路径
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;

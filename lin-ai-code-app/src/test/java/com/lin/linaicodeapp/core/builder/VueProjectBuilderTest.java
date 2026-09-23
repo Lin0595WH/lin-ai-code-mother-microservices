@@ -1,18 +1,15 @@
 package com.lin.linaicodeapp.core.builder;
 
-import com.lin.linaicodemother.exception.BusinessException;
-import com.lin.linaicodemother.exception.ErrorCode;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class VueProjectBuilderTest {
     @Test
-    void rejectsProjectBuildsWhileVueGenerationIsDisabled() {
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> new VueProjectBuilder().buildProject("/tmp/vue-project"));
-
-        assertEquals(ErrorCode.FORBIDDEN_ERROR.getCode(), exception.getCode());
+    void rejectsMissingProjectOrPackageJson(@TempDir Path tempDir) throws Exception {
+        assertFalse(new VueProjectBuilder().buildProject(tempDir.toString()));
     }
 }
