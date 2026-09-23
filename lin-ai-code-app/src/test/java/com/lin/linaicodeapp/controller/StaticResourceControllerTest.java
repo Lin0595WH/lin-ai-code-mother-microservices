@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.web.servlet.HandlerMapping;
 
 import java.nio.file.Files;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.when;
 
 class StaticResourceControllerTest {
     private AppService appService;
+    private StringRedisTemplate redisTemplate;
     private StaticResourceController controller;
     private User user;
     private String projectKey;
@@ -33,7 +36,9 @@ class StaticResourceControllerTest {
     @BeforeEach
     void setUp() {
         appService = mock(AppService.class);
-        controller = new StaticResourceController(appService);
+        redisTemplate = mock(StringRedisTemplate.class);
+        when(redisTemplate.opsForValue()).thenReturn(mock(ValueOperations.class));
+        controller = new StaticResourceController(appService, redisTemplate);
         user = new User();
         user.setId(7L);
         projectKey = Long.toString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
@@ -89,6 +94,33 @@ class StaticResourceControllerTest {
         assertEquals(200, response.getStatusCode().value());
         assertEquals(404, controller.serveStaticResource(key,
                 request("/static/" + key + "/package.json")).getStatusCode().value());
+    }
+
+    @Test
+    void previewTokenAuthorizesSandboxedRequestsWithoutSession() throws Exception {
+        String key = "vue_project_" + projectKey;
+        String token = "preview-token";
+        App app = App.builder().id(Long.parseLong(projectKey)).userId(7L)
+                .codeGenType("vue_project").build();
+        when(appService.getById(app.getId())).thenReturn(app);
+        ValueOperations<String, String> values = redisTemplate.opsForValue();
+        when(values.get("app:preview:" + token)).thenReturn(projectKey + ":7");
+        Path distIndex = outputRoot().resolve(key + "/dist/index.html");
+        Files.createDirectories(distIndex.getParent());
+        Files.writeString(distIndex, "<script src=\"/assets/app.js\"></script>");
+        Path asset = outputRoot().resolve(key + "/dist/assets/app.js");
+        Files.createDirectories(asset.getParent());
+        Files.writeString(asset, "ok");
+
+        MockHttpServletRequest indexRequest = (MockHttpServletRequest) request("/static/" + key + "/preview/" + token + "/dist/index.html");
+        indexRequest.setSession(null);
+        var response = controller.serveStaticResource(key, indexRequest);
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("<script src=\"./assets/app.js\"></script>",
+                response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(200, controller.serveStaticResource(key,
+                request("/static/" + key + "/preview/" + token + "/dist/assets/app.js"))
+                .getStatusCode().value());
     }
 
     private HttpServletRequest request(String path) {

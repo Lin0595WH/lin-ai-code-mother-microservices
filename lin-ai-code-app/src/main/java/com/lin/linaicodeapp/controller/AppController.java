@@ -40,6 +40,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
+import java.util.UUID;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * 应用 控制层。
@@ -51,9 +54,26 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AppController {
 
+    private static final long PREVIEW_TOKEN_TTL_SECONDS = 600;
+
     private final AppService appService;
 
     private final ProjectDownloadService projectDownloadService;
+    private final StringRedisTemplate redisTemplate;
+
+    @GetMapping("/preview-token/{appId}")
+    public BaseResponse<String> getPreviewToken(@PathVariable Long appId, HttpServletRequest request) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 无效");
+        User loginUser = InnerUserService.getLoginUser(request);
+        App app = appService.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId())
+                && !UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole()), ErrorCode.NO_AUTH_ERROR);
+        String token = UUID.randomUUID().toString();
+        redisTemplate.opsForValue().set("app:preview:" + token, appId + ":" + app.getUserId(),
+                Duration.ofSeconds(PREVIEW_TOKEN_TTL_SECONDS));
+        return ResultUtils.success(token);
+    }
 
     /**
      * 应用聊天生成代码（流式 SSE）

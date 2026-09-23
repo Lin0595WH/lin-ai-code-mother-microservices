@@ -24,18 +24,20 @@ import org.springframework.web.servlet.HandlerMapping;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @RestController
 @RequestMapping("/static")
 @RequiredArgsConstructor
 public class StaticResourceController {
     private final AppService appService;
+    private final StringRedisTemplate redisTemplate;
 
     @GetMapping("/{projectKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
             @PathVariable String projectKey,
             HttpServletRequest request) {
-        User loginUser = InnerUserService.getLoginUser(request);
         try {
             int separator = projectKey.lastIndexOf('_');
             if (separator < 1) {
@@ -48,14 +50,20 @@ public class StaticResourceController {
                 return ResponseEntity.notFound().build();
             }
             App app = appService.getById(appId);
-            if (app == null || !loginUser.getId().equals(app.getUserId())
-                    || !codeGenType.equals(app.getCodeGenType())) {
+            if (app == null || !codeGenType.equals(app.getCodeGenType())
+                    || !isPreviewTokenValid(request, appId, app.getUserId())
+                    && !isSessionOwner(request, app)) {
                 throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
             }
 
             String resourcePath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
             String prefix = "/static/" + projectKey;
             resourcePath = resourcePath.substring(prefix.length());
+            if (resourcePath.startsWith("/preview/")) {
+                int tokenEnd = resourcePath.indexOf('/', "/preview/".length());
+                if (tokenEnd < 0) return ResponseEntity.notFound().build();
+                resourcePath = resourcePath.substring(tokenEnd);
+            }
             if (resourcePath.isEmpty()) {
                 HttpHeaders headers = new HttpHeaders();
                 headers.add(HttpHeaders.LOCATION, request.getRequestURI() + "/");
@@ -91,13 +99,43 @@ public class StaticResourceController {
                 return ResponseEntity.notFound().build();
             }
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE, getContentType(target))
+            Resource body = new FileSystemResource(target);
+            if (type == CodeGenTypeEnum.VUE_PROJECT && target.getFileName().toString().equals("index.html")) {
+                String html = Files.readString(target).replace("=\"/assets/", "=\"./assets/")
+                        .replace("='/assets/", "='./assets/");
+                body = new org.springframework.core.io.ByteArrayResource(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, getContentType(target))
                     .header("X-Content-Type-Options", "nosniff")
-                    .body(new FileSystemResource(target));
+                    .header("Referrer-Policy", "no-referrer").body(body);
         } catch (NumberFormatException | IOException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    private boolean isSessionOwner(HttpServletRequest request, App app) {
+        try {
+            User user = InnerUserService.getLoginUser(request);
+            return user.getId().equals(app.getUserId());
+        } catch (BusinessException e) {
+            return false;
+        }
+    }
+
+    private boolean isPreviewTokenValid(HttpServletRequest request, long appId, long ownerId) {
+        String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
+        String marker = "/preview/";
+        int tokenStart = path == null ? -1 : path.indexOf(marker);
+        if (tokenStart < 0) return false;
+        int tokenEnd = path.indexOf('/', tokenStart + marker.length());
+        return tokenEnd > tokenStart && isPreviewTokenValid(
+                path.substring(tokenStart + marker.length(), tokenEnd), appId, ownerId);
+    }
+
+    private boolean isPreviewTokenValid(String token, long appId, long ownerId) {
+        if (token == null || token.isBlank()) return false;
+        String value = redisTemplate.opsForValue().get("app:preview:" + token);
+        return (appId + ":" + ownerId).equals(value);
     }
 
     private Path resolveArtifact(Path root, Path requested) throws IOException {
