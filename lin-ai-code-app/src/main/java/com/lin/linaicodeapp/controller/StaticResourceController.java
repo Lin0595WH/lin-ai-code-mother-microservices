@@ -1,7 +1,15 @@
 package com.lin.linaicodeapp.controller;
 
 import com.lin.linaicodemother.constant.AppConstant;
+import com.lin.linaicodemother.exception.BusinessException;
+import com.lin.linaicodemother.exception.ErrorCode;
+import com.lin.linaicodemother.innerservice.InnerUserService;
+import com.lin.linaicodemother.model.entity.App;
+import com.lin.linaicodemother.model.entity.User;
+import com.lin.linaicodemother.model.enums.CodeGenTypeEnum;
+import com.lin.linaicodeapp.service.AppService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -13,63 +21,115 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.HandlerMapping;
 
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @RestController
 @RequestMapping("/static")
+@RequiredArgsConstructor
 public class StaticResourceController {
+    private final AppService appService;
 
-    // 应用生成根目录（用于浏览）
-    private static final String PREVIEW_ROOT_DIR = AppConstant.CODE_OUTPUT_ROOT_DIR;
-
-    /**
-     * 提供静态资源访问，支持目录重定向
-     * 访问格式：http://localhost:8123/api/static/{deployKey}[/{fileName}]
-     */
-    @GetMapping("/{deployKey}/**")
+    @GetMapping("/{projectKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
-            @PathVariable String deployKey,
+            @PathVariable String projectKey,
             HttpServletRequest request) {
+        User loginUser = InnerUserService.getLoginUser(request);
         try {
-            // 获取资源路径
+            int separator = projectKey.lastIndexOf('_');
+            if (separator < 1) {
+                return ResponseEntity.notFound().build();
+            }
+            String codeGenType = projectKey.substring(0, separator);
+            long appId = Long.parseLong(projectKey.substring(separator + 1));
+            CodeGenTypeEnum type = CodeGenTypeEnum.getEnumByValue(codeGenType);
+            if (type == null) {
+                return ResponseEntity.notFound().build();
+            }
+            App app = appService.getById(appId);
+            if (app == null || !loginUser.getId().equals(app.getUserId())
+                    || !codeGenType.equals(app.getCodeGenType())) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+            }
+
             String resourcePath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
-            resourcePath = resourcePath.substring(("/static/" + deployKey).length());
-            // 如果是目录访问（不带斜杠），重定向到带斜杠的URL
+            String prefix = "/static/" + projectKey;
+            resourcePath = resourcePath.substring(prefix.length());
             if (resourcePath.isEmpty()) {
                 HttpHeaders headers = new HttpHeaders();
-                headers.add("Location", request.getRequestURI() + "/");
+                headers.add(HttpHeaders.LOCATION, request.getRequestURI() + "/");
                 return new ResponseEntity<>(headers, HttpStatus.MOVED_PERMANENTLY);
             }
-            // 默认返回 index.html
             if (resourcePath.equals("/")) {
                 resourcePath = "/index.html";
             }
-            // 构建文件路径
-            String filePath = PREVIEW_ROOT_DIR + "/" + deployKey + resourcePath;
-            File file = new File(filePath);
-            // 检查文件是否存在
-            if (!file.exists()) {
+
+            Path projectRoot = Path.of(AppConstant.CODE_OUTPUT_ROOT_DIR, projectKey).toAbsolutePath().normalize();
+            if (Files.isSymbolicLink(projectRoot)) {
                 return ResponseEntity.notFound().build();
             }
-            // 返回文件资源
-            Resource resource = new FileSystemResource(file);
+            Path artifactRoot = type == CodeGenTypeEnum.VUE_PROJECT ? projectRoot.resolve("dist") : projectRoot;
+            if (type == CodeGenTypeEnum.VUE_PROJECT) {
+                if (resourcePath.equals("/index.html")) {
+                    // Root Vue preview resolves to the built entry point.
+                } else if (resourcePath.startsWith("/dist/")) {
+                    resourcePath = resourcePath.substring("/dist".length());
+                } else {
+                    return ResponseEntity.notFound().build();
+                }
+            }
+            Path requested = Path.of(resourcePath.substring(1));
+            if (requested.isAbsolute() || requested.normalize().startsWith("..")) {
+                return ResponseEntity.notFound().build();
+            }
+            if (type != CodeGenTypeEnum.VUE_PROJECT && !isFixedArtifact(type, requested)) {
+                return ResponseEntity.notFound().build();
+            }
+            Path target = resolveArtifact(artifactRoot, requested);
+            if (target == null || !Files.isRegularFile(target)) {
+                return ResponseEntity.notFound().build();
+            }
+
             return ResponseEntity.ok()
-                    .header("Content-Type", getContentTypeWithCharset(filePath))
-                    .body(resource);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+                    .header(HttpHeaders.CONTENT_TYPE, getContentType(target))
+                    .header("X-Content-Type-Options", "nosniff")
+                    .body(new FileSystemResource(target));
+        } catch (NumberFormatException | IOException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 
-    /**
-     * 根据文件扩展名返回带字符编码的 Content-Type
-     */
-    private String getContentTypeWithCharset(String filePath) {
-        if (filePath.endsWith(".html")) return "text/html; charset=UTF-8";
-        if (filePath.endsWith(".css")) return "text/css; charset=UTF-8";
-        if (filePath.endsWith(".js")) return "application/javascript; charset=UTF-8";
-        if (filePath.endsWith(".png")) return "image/png";
-        if (filePath.endsWith(".jpg")) return "image/jpeg";
+    private Path resolveArtifact(Path root, Path requested) throws IOException {
+        if (!Files.isDirectory(root) || Files.isSymbolicLink(root)) {
+            return null;
+        }
+        Path realRoot = root.toRealPath();
+        Path current = realRoot;
+        for (Path part : requested) {
+            current = current.resolve(part);
+            if (Files.isSymbolicLink(current)) {
+                return null;
+            }
+        }
+        Path target = current.normalize();
+        return target.startsWith(realRoot) ? target : null;
+    }
+
+    private boolean isFixedArtifact(CodeGenTypeEnum type, Path path) {
+        if (path.getNameCount() != 1) {
+            return false;
+        }
+        String name = path.toString();
+        return name.equals("index.html") || (type == CodeGenTypeEnum.MULTI_FILE
+                && (name.equals("style.css") || name.equals("script.js")));
+    }
+
+    private String getContentType(Path path) {
+        String name = path.getFileName().toString();
+        if (name.endsWith(".html")) return "text/html; charset=UTF-8";
+        if (name.endsWith(".css")) return "text/css; charset=UTF-8";
+        if (name.endsWith(".js")) return "application/javascript; charset=UTF-8";
         return "application/octet-stream";
     }
 }
