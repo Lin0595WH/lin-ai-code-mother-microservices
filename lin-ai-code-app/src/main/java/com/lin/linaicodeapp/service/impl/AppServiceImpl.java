@@ -196,9 +196,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 生成类型
         String codeGenType = selectedCodeGenType == null
                 ? CodeGenTypeEnum.HTML.getValue() : selectedCodeGenType.getValue();
-        if (CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType)) {
-            codeGenType = CodeGenTypeEnum.HTML.getValue();
-        }
+        ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT.getValue().equals(codeGenType),
+                ErrorCode.FORBIDDEN_ERROR, "Vue 项目生成暂时关闭");
         app.setCodeGenType(codeGenType);
         // 应用名称
         String appName = CharSequenceUtil.isBlank(routingResult.getAppName())
