@@ -7,24 +7,22 @@ import com.lin.linaicodeapp.service.AppCreationQuotaService;
 import com.lin.linaicodeapp.service.ChatHistoryService;
 import com.lin.linaicodemother.ai.AiCodeGenTypeRoutingService;
 import com.lin.linaicodemother.ai.model.RoutingResult;
-import com.lin.linaicodemother.exception.BusinessException;
-import com.lin.linaicodemother.exception.ErrorCode;
 import com.lin.linaicodemother.model.dto.app.AppAddRequest;
+import com.lin.linaicodemother.model.entity.App;
 import com.lin.linaicodemother.model.entity.User;
 import com.lin.linaicodemother.model.enums.CodeGenTypeEnum;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AppServiceImplTest {
 
     @Test
-    void shouldRejectVueAppInsteadOfSavingItAsHtml() {
+    void shouldPreserveVueTypeWhenCreatingApp() {
         AiCodeGenTypeRoutingServiceFactory routingFactory = mock(AiCodeGenTypeRoutingServiceFactory.class);
         AiCodeGenTypeRoutingService routingService = mock(AiCodeGenTypeRoutingService.class);
         AppCreationQuotaService quotaService = mock(AppCreationQuotaService.class);
@@ -32,6 +30,8 @@ class AppServiceImplTest {
         routingResult.setCodeGenTypeEnum(CodeGenTypeEnum.VUE_PROJECT);
         when(routingFactory.createAiCodeGenTypeRoutingService()).thenReturn(routingService);
         when(routingService.routing("Build a Vue dashboard")).thenReturn(routingResult);
+        when(quotaService.saveApp(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
 
         AppServiceImpl service = new AppServiceImpl(mock(com.lin.linaicodemother.mapstruct.AppModuleMapper.class),
                 mock(AiCodeGeneratorFacade.class), mock(ChatHistoryService.class),
@@ -41,10 +41,10 @@ class AppServiceImplTest {
         User user = new User();
         user.setId(1L);
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> service.createApp(request, user));
+        service.createApp(request, user);
 
-        assertEquals(ErrorCode.FORBIDDEN_ERROR.getCode(), exception.getCode());
-        verify(quotaService, never()).saveApp(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        ArgumentCaptor<App> appCaptor = ArgumentCaptor.forClass(App.class);
+        verify(quotaService).saveApp(appCaptor.capture(), org.mockito.ArgumentMatchers.eq(user));
+        assertEquals(CodeGenTypeEnum.VUE_PROJECT.getValue(), appCaptor.getValue().getCodeGenType());
     }
 }
