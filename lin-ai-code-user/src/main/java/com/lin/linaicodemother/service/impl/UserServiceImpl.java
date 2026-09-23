@@ -160,10 +160,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .and(User::getUserAccount).like(userAccount, StrUtil::isNotBlank)
                 .and(User::getUserName).like(userName, StrUtil::isNotBlank)
                 .and(User::getUserProfile).like(userProfile, StrUtil::isNotBlank);
-        if (CharSequenceUtil.isNotBlank(sortField)) {
-            queryWrapper = queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
-        }
-        return queryWrapper;
+        String orderField = switch (sortField == null ? "" : sortField) {
+            case "id" -> "id";
+            case "userAccount" -> "user_account";
+            case "userName" -> "user_name";
+            case "userRole" -> "user_role";
+            case "createTime" -> "create_time";
+            case "updateTime" -> "update_time";
+            default -> "create_time";
+        };
+        return queryWrapper.orderBy(orderField, "ascend".equals(sortOrder));
 
     }
 

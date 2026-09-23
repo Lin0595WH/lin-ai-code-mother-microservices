@@ -332,6 +332,16 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Long userId = appQueryRequest.getUserId();
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
+        boolean isAscend = "ascend".equals(sortOrder);
+        String orderField = switch (sortField == null ? "" : sortField) {
+            case "id" -> "id";
+            case "appName" -> "app_name";
+            case "priority" -> "priority";
+            case "userId" -> "user_id";
+            case "createTime" -> "create_time";
+            case "updateTime" -> "update_time";
+            default -> "create_time";
+        };
         return QueryWrapper.create()
                 .eq("id", id, id != null)
                 .like("app_name", appName, StrUtil::isNotBlank)
@@ -341,7 +351,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .eq("deploy_key", deployKey, StrUtil::isNotBlank)
                 .eq("priority", priority, priority != null)
                 .eq("user_id", userId, userId != null)
-                .orderBy(sortField, "ascend".equals(sortOrder));
+                .orderBy(orderField, isAscend);
     }
 
     /**
