@@ -31,6 +31,9 @@ server:
     session:
       cookie:
         max-age: 2592000
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:true}
+        same-site: lax
 # springdoc-openapi
 springdoc:
   group-configs:
