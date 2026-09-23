@@ -1,9 +1,7 @@
 package com.lin.linaicodemother.ai.tools;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.text.CharSequenceUtil;
 import cn.hutool.json.JSONObject;
-import com.lin.linaicodemother.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
@@ -11,10 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * 文件目录读取工具
@@ -41,42 +41,44 @@ public class FileDirReadTool extends BaseTool {
 
     @Tool("读取目录结构，获取指定目录下的所有文件和子目录信息")
     public String readDir(@P("目录的相对路径，为空则读取整个项目结构") String relativeDirPath, @ToolMemoryId Long appId) {
-        try {
-            Path path = Paths.get(relativeDirPath == null ? "" : relativeDirPath);
-            if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId;
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeDirPath == null ? "" : relativeDirPath);
+        synchronized (projectLock(appId)) {
+            try {
+                Path path = relativeDirPath == null || relativeDirPath.isBlank()
+                        ? resolveProjectPath(appId, ".", true)
+                        : resolveProjectPath(appId, relativeDirPath, true);
+                File targetDir = path.toFile();
+                if (!targetDir.exists() || !targetDir.isDirectory()) {
+                    return "错误：目录不存在或不是目录 - " + relativeDirPath;
+                }
+                StringBuilder structure = new StringBuilder("项目目录结构:\n");
+                List<File> allFiles;
+                try (Stream<Path> paths = Files.walk(path)) {
+                    List<Path> entries = paths.toList();
+                    if (entries.stream().anyMatch(Files::isSymbolicLink)) {
+                        throw new IOException("项目路径不能包含符号链接");
+                    }
+                    allFiles = entries.stream()
+                            .filter(Files::isRegularFile)
+                            .filter(file -> !shouldIgnore(file.getFileName().toString()))
+                            .map(Path::toFile)
+                            .toList();
+                }
+                allFiles.stream()
+                        .sorted((f1, f2) -> {
+                            int depth1 = getRelativeDepth(targetDir, f1);
+                            int depth2 = getRelativeDepth(targetDir, f2);
+                            return depth1 == depth2 ? f1.getPath().compareTo(f2.getPath()) : Integer.compare(depth1, depth2);
+                        })
+                        .forEach(file -> {
+                            int depth = getRelativeDepth(targetDir, file);
+                            structure.append("  ".repeat(depth)).append(file.getName()).append('\n');
+                        });
+                return structure.toString();
+            } catch (Exception e) {
+                String errorMessage = "读取目录结构失败: " + relativeDirPath + ", 错误: " + e.getMessage();
+                log.error(errorMessage, e);
+                return errorMessage;
             }
-            File targetDir = path.toFile();
-            if (!targetDir.exists() || !targetDir.isDirectory()) {
-                return "错误：目录不存在或不是目录 - " + relativeDirPath;
-            }
-            StringBuilder structure = new StringBuilder();
-            structure.append("项目目录结构:\n");
-            // 使用 Hutool 递归获取所有文件
-            List<File> allFiles = FileUtil.loopFiles(targetDir, file -> !shouldIgnore(file.getName()));
-            // 按路径深度和名称排序显示
-            allFiles.stream()
-                    .sorted((f1, f2) -> {
-                        int depth1 = getRelativeDepth(targetDir, f1);
-                        int depth2 = getRelativeDepth(targetDir, f2);
-                        if (depth1 != depth2) {
-                            return Integer.compare(depth1, depth2);
-                        }
-                        return f1.getPath().compareTo(f2.getPath());
-                    })
-                    .forEach(file -> {
-                        int depth = getRelativeDepth(targetDir, file);
-                        String indent = "  ".repeat(depth);
-                        structure.append(indent).append(file.getName());
-                    });
-            return structure.toString();
-
-        } catch (Exception e) {
-            String errorMessage = "读取目录结构失败: " + relativeDirPath + ", 错误: " + e.getMessage();
-            log.error(errorMessage, e);
-            return errorMessage;
         }
     }
 
