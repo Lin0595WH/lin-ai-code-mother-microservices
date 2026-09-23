@@ -74,6 +74,8 @@ public class StaticResourceController {
                 headers.add(HttpHeaders.LOCATION, request.getRequestURI() + "/");
                 return new ResponseEntity<>(headers, HttpStatus.MOVED_PERMANENTLY);
             }
+            boolean vueRootEntry = type == CodeGenTypeEnum.VUE_PROJECT
+                    && (resourcePath.equals("/") || resourcePath.equals("/index.html"));
             if (resourcePath.equals("/")) {
                 resourcePath = "/index.html";
             }
@@ -106,10 +108,10 @@ public class StaticResourceController {
 
             Resource body = new FileSystemResource(target);
             if (type == CodeGenTypeEnum.VUE_PROJECT && target.getFileName().toString().equals("index.html")) {
-                String html = rewritePreviewResourcePaths(Files.readString(target));
+                String html = rewriteVueHtmlResources(Files.readString(target), vueRootEntry);
                 body = new org.springframework.core.io.ByteArrayResource(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } else if (type == CodeGenTypeEnum.VUE_PROJECT && target.toString().endsWith(".css")) {
-                String css = rewritePreviewResourcePaths(Files.readString(target));
+                String css = rewriteVueCssResources(Files.readString(target));
                 body = new org.springframework.core.io.ByteArrayResource(css.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
             return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, getContentType(target))
@@ -149,10 +151,15 @@ public class StaticResourceController {
         }
     }
 
-    private String rewritePreviewResourcePaths(String content) {
-        String relativeHtml = ROOT_RELATIVE_HTML_RESOURCE.matcher(content).replaceAll("$1./$2$3");
-        return relativeHtml.replace("url(/", "url(./").replace("url('/", "url('./")
-                .replace("url(\"/", "url(\"./");
+    private String rewriteVueHtmlResources(String html, boolean rootEntry) {
+        String prefix = rootEntry ? "./dist/" : "./";
+        return ROOT_RELATIVE_HTML_RESOURCE.matcher(html).replaceAll("$1" + prefix + "$2$3");
+    }
+
+    private String rewriteVueCssResources(String css) {
+        return css.replace("url(/assets/", "url(./").replace("url('/assets/", "url('./")
+                .replace("url(\"/assets/", "url(\"./").replace("url(/", "url(../")
+                .replace("url('/", "url('../").replace("url(\"/", "url(\"../");
     }
 
     private Path resolveArtifact(Path root, Path requested) throws IOException {

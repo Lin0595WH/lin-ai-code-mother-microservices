@@ -111,6 +111,8 @@ class StaticResourceControllerTest {
         Path asset = outputRoot().resolve(key + "/dist/assets/app.js");
         Files.createDirectories(asset.getParent());
         Files.writeString(asset, "ok");
+        Files.writeString(outputRoot().resolve(key + "/dist/assets/app.css"), "body{background:url(/assets/logo.svg)}");
+        Files.writeString(outputRoot().resolve(key + "/dist/assets/logo.svg"), "svg");
 
         MockHttpServletRequest indexRequest = (MockHttpServletRequest) request("/static/" + key + "/preview/" + token + "/dist/index.html");
         indexRequest.setSession(null);
@@ -121,6 +123,14 @@ class StaticResourceControllerTest {
         assertEquals(200, controller.serveStaticResource(key,
                 request("/static/" + key + "/preview/" + token + "/dist/assets/app.js"))
                 .getStatusCode().value());
+        assertEquals("body{background:url(./logo.svg)}",
+                controller.serveStaticResource(key,
+                        request("/static/" + key + "/preview/" + token + "/dist/assets/app.css"))
+                        .getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("<script src=\"./dist/assets/app.js\"></script>",
+                controller.serveStaticResource(key,
+                        request("/static/" + key + "/preview/" + token + "/"))
+                        .getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private HttpServletRequest request(String path) {
