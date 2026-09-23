@@ -61,9 +61,7 @@ public class GlobalExceptionHandler {
         }
         // 判断是否是SSE请求（通过Accept头或URL路径）
         String accept = request.getHeader("Accept");
-        String uri = request.getRequestURI();
-        if ((accept != null && accept.contains("text/event-stream")) ||
-                uri.contains("/chat/gen/code")) {
+        if (accept != null && accept.contains("text/event-stream")) {
             try {
                 // 设置SSE响应头
                 response.setContentType("text/event-stream");
