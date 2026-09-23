@@ -129,7 +129,10 @@ public class AiCodeGeneratorFacade {
                 })
                 .onCompleteResponse((ChatResponse response) -> {
                     String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                    vueProjectBuilder.buildProject(projectPath);
+                    if (!vueProjectBuilder.buildProject(projectPath)) {
+                        sink.error(new BusinessException(ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，请重试"));
+                        return;
+                    }
                     sink.complete();
                 })
                 .onError(error -> {

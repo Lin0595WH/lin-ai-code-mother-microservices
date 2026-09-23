@@ -56,16 +56,16 @@ public class VueProjectBuilder {
     }
 
     private boolean execute(File workingDir, List<String> command, long timeoutSeconds) {
+        Process process = null;
         try {
-            Process process = new ProcessBuilder(command)
+            process = new ProcessBuilder(command)
                     .directory(workingDir)
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start();
             boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
-                process.descendants().forEach(child -> child.destroyForcibly());
-                process.destroyForcibly();
+                terminate(process);
                 log.error("命令执行超时：{}", command);
                 return false;
             }
@@ -74,12 +74,26 @@ public class VueProjectBuilder {
                 return false;
             }
             return true;
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
+        } catch (InterruptedException e) {
+            if (process != null) {
+                terminate(process);
             }
+            Thread.currentThread().interrupt();
+            log.error("执行命令被中断：{}", command, e);
+            return false;
+        } catch (IOException e) {
             log.error("执行命令失败：{}", command, e);
             return false;
+        }
+    }
+
+    private void terminate(Process process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+        try {
+            process.waitFor(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
