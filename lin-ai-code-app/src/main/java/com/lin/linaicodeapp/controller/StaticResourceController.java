@@ -26,11 +26,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.dao.DataAccessException;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/static")
 @RequiredArgsConstructor
 public class StaticResourceController {
+    private static final Pattern ROOT_RELATIVE_HTML_RESOURCE =
+            Pattern.compile("((?:src|href)\\s*=\\s*['\"])\\/(?!/)([^'\"]*)(['\"])", Pattern.CASE_INSENSITIVE);
+
     private final AppService appService;
     private final StringRedisTemplate redisTemplate;
 
@@ -101,9 +106,11 @@ public class StaticResourceController {
 
             Resource body = new FileSystemResource(target);
             if (type == CodeGenTypeEnum.VUE_PROJECT && target.getFileName().toString().equals("index.html")) {
-                String html = Files.readString(target).replace("=\"/assets/", "=\"./assets/")
-                        .replace("='/assets/", "='./assets/");
+                String html = rewritePreviewResourcePaths(Files.readString(target));
                 body = new org.springframework.core.io.ByteArrayResource(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } else if (type == CodeGenTypeEnum.VUE_PROJECT && target.toString().endsWith(".css")) {
+                String css = rewritePreviewResourcePaths(Files.readString(target));
+                body = new org.springframework.core.io.ByteArrayResource(css.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
             return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, getContentType(target))
                     .header("X-Content-Type-Options", "nosniff")
@@ -134,8 +141,18 @@ public class StaticResourceController {
 
     private boolean isPreviewTokenValid(String token, long appId, long ownerId) {
         if (token == null || token.isBlank()) return false;
-        String value = redisTemplate.opsForValue().get("app:preview:" + token);
-        return (appId + ":" + ownerId).equals(value);
+        try {
+            String value = redisTemplate.opsForValue().get("app:preview:" + token);
+            return (appId + ":" + ownerId).equals(value);
+        } catch (DataAccessException e) {
+            return false;
+        }
+    }
+
+    private String rewritePreviewResourcePaths(String content) {
+        String relativeHtml = ROOT_RELATIVE_HTML_RESOURCE.matcher(content).replaceAll("$1./$2$3");
+        return relativeHtml.replace("url(/", "url(./").replace("url('/", "url('./")
+                .replace("url(\"/", "url(\"./");
     }
 
     private Path resolveArtifact(Path root, Path requested) throws IOException {
