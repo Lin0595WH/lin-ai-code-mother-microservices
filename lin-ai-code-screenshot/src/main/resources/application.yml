@@ -1,8 +1,6 @@
 ﻿spring:
   application:
     name: lin-ai-code-screenshot
-  profiles:
-    active: local
 server:
   port: 8127
   servlet:
@@ -10,7 +8,7 @@ server:
 # Dubbo
 dubbo:
   registry:
-    address: nacos://127.0.0.1:8848?username=nacos&password=nacos
+    address: nacos://${NACOS_SERVER_ADDR:127.0.0.1:8848}?username=${NACOS_USERNAME}&password=${NACOS_PASSWORD}
     register-mode: instance
   protocol:
     name: tri

@@ -13,15 +13,15 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/lin_ai_code_mother
-    username: root
-    password: root
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   # redis
   data:
     redis:
       host: localhost
       port: 6379
       database: 0
-      password:
+      password: ${REDIS_PASSWORD}
       ttl: 3600 #缓存过期时间（秒）
 server:
   port: 8124
@@ -44,7 +44,7 @@ knife4j:
 # Dubbo
 dubbo:
   registry:
-    address: nacos://127.0.0.1:8848?username=nacos&password=nacos
+    address: nacos://${NACOS_SERVER_ADDR:127.0.0.1:8848}?username=${NACOS_USERNAME}&password=${NACOS_PASSWORD}
     register-mode: instance
   protocol:
     name: tri
