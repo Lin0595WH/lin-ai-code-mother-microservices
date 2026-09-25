@@ -9,7 +9,7 @@ import com.lin.linaicodemother.ai.tools.ToolManager;
 import com.lin.linaicodemother.model.enums.CodeGenTypeEnum;
 import com.lin.linaicodeapp.service.ChatHistoryService;
 import com.lin.linaicodemother.utils.SpringContextUtil;
-import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
@@ -33,7 +33,7 @@ public class AiCodeGeneratorServiceFactory {
 
     private final ChatModel chatModel;
 
-    private final RedisChatMemoryStore redisChatMemoryStore;
+    private final ChatMemoryStore redisChatMemoryStore;
 
     private final ChatHistoryService chatHistoryService;
 
@@ -41,7 +41,7 @@ public class AiCodeGeneratorServiceFactory {
 
     public AiCodeGeneratorServiceFactory(
             @Qualifier("openAiChatModel") ChatModel chatModel,
-            RedisChatMemoryStore redisChatMemoryStore,
+            ChatMemoryStore redisChatMemoryStore,
             ChatHistoryService chatHistoryService,
             ToolManager toolManager
     ) {

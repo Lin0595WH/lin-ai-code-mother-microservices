@@ -47,6 +47,11 @@ class BaseToolPathTest {
         assertTrue(directory.startsWith("项目目录结构:"));
         assertTrue(directory.contains("App.vue"));
 
+        Path dependencies = Files.createDirectories(file.getParent().getParent().resolve("node_modules/pkg"));
+        Files.writeString(dependencies.resolve("private.txt"), "ignored");
+        directory = new FileDirReadTool().readDir(".", 1L);
+        assertFalse(directory.contains("private.txt"));
+
         Path root = tempDir.resolve("tmp/code_output/vue_project_1");
         Path outside = Files.createDirectory(tempDir.resolve("outside"));
         Files.createSymbolicLink(root.resolve("link"), outside);

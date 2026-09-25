@@ -23,6 +23,12 @@ import static org.mockito.Mockito.when;
 class AppServiceImplTest {
 
     @Test
+    void shouldBuildDeployUrlFromConfiguredHost() {
+        assertEquals("https://aiapp.linwh.top/dist/demo/",
+                AppServiceImpl.buildDeployUrl("https://aiapp.linwh.top/dist/", "demo"));
+    }
+
+    @Test
     void shouldPreserveVueTypeWhenCreatingApp() {
         AiCodeGenTypeRoutingServiceFactory routingFactory = mock(AiCodeGenTypeRoutingServiceFactory.class);
         AiCodeGenTypeRoutingService routingService = mock(AiCodeGenTypeRoutingService.class);

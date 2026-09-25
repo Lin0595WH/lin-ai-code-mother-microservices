@@ -54,7 +54,7 @@ class AppCreationQuotaServiceTest {
         App app = createApp(codeGenType);
         User user = createUser(UserRoleEnum.USER);
         when(appMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
-        when(appMapper.insert(app)).thenReturn(1);
+        when(appMapper.insertSelective(app)).thenReturn(1);
 
         boolean result = quotaService.saveApp(app, user);
 
@@ -64,7 +64,7 @@ class AppCreationQuotaServiceTest {
         verify(appMapper).selectCountByQuery(queryCaptor.capture());
         assertTrue(queryCaptor.getValue().toSQL().contains("user_id"));
         assertTrue(queryCaptor.getValue().toSQL().contains("code_gen_type"));
-        verify(appMapper).insert(app);
+        verify(appMapper).insertSelective(app);
         verify(lock).unlock();
     }
 
@@ -80,7 +80,7 @@ class AppCreationQuotaServiceTest {
 
         assertEquals(ErrorCode.FORBIDDEN_ERROR.getCode(), exception.getCode());
         assertTrue(exception.getMessage().contains("最多只能创建 1 个"));
-        verify(appMapper, never()).insert(any(App.class));
+        verify(appMapper, never()).insertSelective(any(App.class));
         verify(lock).unlock();
     }
 
@@ -88,12 +88,12 @@ class AppCreationQuotaServiceTest {
     void shouldNotLimitAdminUser() {
         App app = createApp(CodeGenTypeEnum.HTML);
         User admin = createUser(UserRoleEnum.ADMIN);
-        when(appMapper.insert(app)).thenReturn(1);
+        when(appMapper.insertSelective(app)).thenReturn(1);
 
         boolean result = quotaService.saveApp(app, admin);
 
         assertTrue(result);
-        verify(appMapper).insert(app);
+        verify(appMapper).insertSelective(app);
         verifyNoInteractions(redissonClient);
     }
 
@@ -117,7 +117,7 @@ class AppCreationQuotaServiceTest {
         App app = createApp(CodeGenTypeEnum.VUE_PROJECT);
         User user = createUser(UserRoleEnum.USER);
         when(appMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
-        when(appMapper.insert(app)).thenReturn(0);
+        when(appMapper.insertSelective(app)).thenReturn(0);
 
         boolean result = quotaService.saveApp(app, user);
 

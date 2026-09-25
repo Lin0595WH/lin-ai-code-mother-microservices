@@ -127,6 +127,9 @@ class StaticResourceControllerTest {
                 controller.serveStaticResource(key,
                         request("/static/" + key + "/preview/" + token + "/dist/assets/app.css"))
                         .getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals("image/svg+xml", controller.serveStaticResource(key,
+                request("/static/" + key + "/preview/" + token + "/dist/assets/logo.svg"))
+                .getHeaders().getFirst("Content-Type"));
         assertEquals("<script src=\"./dist/assets/app.js\"></script>",
                 controller.serveStaticResource(key,
                         request("/static/" + key + "/preview/" + token + "/"))

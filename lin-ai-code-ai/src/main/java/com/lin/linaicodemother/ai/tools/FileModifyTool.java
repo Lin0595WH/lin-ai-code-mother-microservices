@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 
 /**
  * 文件修改工具
@@ -44,7 +44,13 @@ public class FileModifyTool extends BaseTool{
                 if (originalContent.equals(modifiedContent)) {
                     return "信息：替换后文件内容未发生变化 - " + relativeFilePath;
                 }
-                Files.writeString(path, modifiedContent, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                Path temp = Files.createTempFile(path.getParent(), ".modify-", ".tmp");
+                try {
+                    Files.writeString(temp, modifiedContent);
+                    Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } finally {
+                    Files.deleteIfExists(temp);
+                }
                 log.info("成功修改文件: {}", path.toAbsolutePath());
                 return "文件修改成功: " + relativeFilePath;
             } catch (IOException e) {

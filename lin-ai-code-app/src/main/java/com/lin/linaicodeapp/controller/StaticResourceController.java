@@ -116,6 +116,7 @@ public class StaticResourceController {
             }
             return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, getContentType(target))
                     .header("X-Content-Type-Options", "nosniff")
+                    .header("Content-Security-Policy", "sandbox allow-scripts")
                     .header("Referrer-Policy", "no-referrer").body(body);
         } catch (NumberFormatException | IOException e) {
             return ResponseEntity.notFound().build();
@@ -192,6 +193,15 @@ public class StaticResourceController {
         if (name.endsWith(".html")) return "text/html; charset=UTF-8";
         if (name.endsWith(".css")) return "text/css; charset=UTF-8";
         if (name.endsWith(".js")) return "application/javascript; charset=UTF-8";
+        if (name.endsWith(".svg")) return "image/svg+xml";
+        if (name.endsWith(".png")) return "image/png";
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+        if (name.endsWith(".webp")) return "image/webp";
+        if (name.endsWith(".gif")) return "image/gif";
+        if (name.endsWith(".ico")) return "image/x-icon";
+        if (name.endsWith(".woff2")) return "font/woff2";
+        if (name.endsWith(".woff")) return "font/woff";
+        if (name.endsWith(".ttf")) return "font/ttf";
         return "application/octet-stream";
     }
 }

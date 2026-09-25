@@ -13,6 +13,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Slf4j
@@ -59,9 +60,11 @@ public class GlobalExceptionHandler {
             // 无法输出SSE流，交由全局统一JSON返回处理
             return false;
         }
-        // 判断是否是SSE请求（通过Accept头或URL路径）
+        // 异步流可能已经开始输出，此时也通过响应类型识别 SSE。
         String accept = request.getHeader("Accept");
-        if (accept != null && accept.contains("text/event-stream")) {
+        String contentType = response.getContentType();
+        if (accept != null && accept.contains("text/event-stream")
+                || contentType != null && contentType.startsWith("text/event-stream")) {
             try {
                 // 设置SSE响应头
                 response.setContentType("text/event-stream");
@@ -77,11 +80,13 @@ public class GlobalExceptionHandler {
                 String errorJson = JSONUtil.toJsonStr(errorData);
                 // 发送业务错误事件（避免与标准error事件冲突）
                 String sseData = "event: business-error\ndata: " + errorJson + "\n\n";
-                response.getWriter().write(sseData);
-                response.getWriter().flush();
-                // 发送结束事件
-                response.getWriter().write("event: done\ndata: {}\n\n");
-                response.getWriter().flush();
+                try {
+                    response.getOutputStream().write(sseData.getBytes(StandardCharsets.UTF_8));
+                    response.getOutputStream().flush();
+                } catch (IllegalStateException writerInUse) {
+                    response.getWriter().write(sseData);
+                    response.getWriter().flush();
+                }
                 // 表示已处理SSE请求
                 return true;
             } catch (IOException ioException) {

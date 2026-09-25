@@ -99,6 +99,7 @@ class PreviewCorsTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "null"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"))
+                .andExpect(header().string("Content-Security-Policy", "sandbox allow-scripts"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"));
     }
 

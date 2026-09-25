@@ -1,7 +1,13 @@
 ### 忽略我的本地配置项 ###
 application-local.yml
+application-local.yaml
 
 target/
+/tmp/
+/lin-ai-code-app/tmp/
+deploy/releases/*.jar
+deploy/config/*/application-prod.yml
+deploy/data/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

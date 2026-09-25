@@ -10,11 +10,14 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * 文件目录读取工具
@@ -51,18 +54,24 @@ public class FileDirReadTool extends BaseTool {
                     return "错误：目录不存在或不是目录 - " + relativeDirPath;
                 }
                 StringBuilder structure = new StringBuilder("项目目录结构:\n");
-                List<File> allFiles;
-                try (Stream<Path> paths = Files.walk(path)) {
-                    List<Path> entries = paths.toList();
-                    if (entries.stream().anyMatch(Files::isSymbolicLink)) {
-                        throw new IOException("项目路径不能包含符号链接");
+                List<File> allFiles = new ArrayList<>();
+                Files.walkFileTree(path, new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                        return !dir.equals(path) && shouldIgnore(dir.getFileName().toString())
+                                ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
                     }
-                    allFiles = entries.stream()
-                            .filter(Files::isRegularFile)
-                            .filter(file -> !shouldIgnore(file.getFileName().toString()))
-                            .map(Path::toFile)
-                            .toList();
-                }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        if (attrs.isSymbolicLink()) throw new IOException("项目路径不能包含符号链接");
+                        if (attrs.isRegularFile() && !shouldIgnore(file.getFileName().toString())) {
+                            if (allFiles.size() >= 5000) throw new IOException("项目文件过多");
+                            allFiles.add(file.toFile());
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
                 allFiles.stream()
                         .sorted((f1, f2) -> {
                             int depth1 = getRelativeDepth(targetDir, f1);

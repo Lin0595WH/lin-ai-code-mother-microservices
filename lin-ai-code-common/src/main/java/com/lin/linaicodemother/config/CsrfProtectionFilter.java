@@ -43,14 +43,18 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
 
     private boolean hasTrustedOrigin(HttpServletRequest request) {
         String origin = request.getHeader("Origin");
-        if (origin == null || origin.isBlank()) return true;
+        if (origin == null || origin.isBlank()) {
+            return request.getCookies() == null || request.getCookies().length == 0
+                    || "same-origin".equalsIgnoreCase(request.getHeader("Sec-Fetch-Site"));
+        }
         String host = request.getHeader("Host");
         if (host == null || host.isBlank()) return false;
         try {
             URI originUri = new URI(origin);
             // Vite/Higress may rewrite Host; trust only the exact origins also authorized by CORS.
             return allowedOrigins.stream().anyMatch(allowedOrigin -> allowedOrigin.trim().equalsIgnoreCase(origin))
-                    || originUri.getRawAuthority() != null && originUri.getRawAuthority().equalsIgnoreCase(host);
+                    || originUri.getRawAuthority() != null && originUri.getRawAuthority().equalsIgnoreCase(host)
+                    && originUri.getScheme() != null && originUri.getScheme().equalsIgnoreCase(request.getScheme());
         } catch (URISyntaxException e) {
             return false;
         }

@@ -1,0 +1,136 @@
+name: ai-code-mother
+
+services:
+  user:
+    build:
+      context: .
+      dockerfile: docker/user.Dockerfile
+    image: ai-code-mother-user:local
+    container_name: ai-code-mother-user
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/config/
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -Dfile.encoding=UTF-8
+    volumes:
+      - ./config/user/application-prod.yml:/config/application-prod.yml:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8124"
+      - "50051"
+    mem_limit: 512m
+    cpus: "0.75"
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      baota_net:
+        aliases:
+          - ai-code-mother-user.svc
+
+  screenshot:
+    build:
+      context: .
+      dockerfile: docker/screenshot.Dockerfile
+    image: ai-code-mother-screenshot:local
+    container_name: ai-code-mother-screenshot
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/config/
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -Dfile.encoding=UTF-8 -Dwebdriver.chrome.driver=/usr/bin/chromedriver
+    volumes:
+      - ./config/screenshot/application-prod.yml:/config/application-prod.yml:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8127"
+      - "50052"
+    shm_size: 512m
+    mem_limit: 1536m
+    cpus: "1.0"
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      - baota_net
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: ai-code-mother-app:local
+    container_name: ai-code-mother-app
+    restart: unless-stopped
+    depends_on:
+      - user
+      - screenshot
+      - vue-builder
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/config/
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -Dfile.encoding=UTF-8
+      VUE_BUILDER_URL: http://vue-builder:8128
+    volumes:
+      - ./config/app/application-prod.yml:/config/application-prod.yml:ro
+      - ./data/code_output:/app/tmp/code_output
+      - ./data/code_deploy:/app/tmp/code_deploy
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8125"
+      - "50053"
+    mem_limit: 3072m
+    cpus: "2.0"
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      baota_net:
+        aliases:
+          - ai-code-mother-app.svc
+      builder_net:
+
+  vue-builder:
+    build:
+      context: .
+      dockerfile: docker/vue-builder.Dockerfile
+    image: ai-code-mother-vue-builder:local
+    container_name: ai-code-mother-vue-builder
+    restart: always
+    init: true
+    read_only: true
+    environment:
+      HOME: /tmp
+      npm_config_cache: /tmp/npm-cache
+    tmpfs:
+      - /tmp:exec,size=1073741824,uid=10001,gid=10001,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2048m
+    cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+    networks:
+      - builder_net
+
+networks:
+  baota_net:
+    external: true
+  builder_net:

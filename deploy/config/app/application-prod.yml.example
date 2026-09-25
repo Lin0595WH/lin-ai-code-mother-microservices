@@ -1,0 +1,58 @@
+app:
+  cors:
+    allowed-origins: https://aiapp.linwh.top
+  deploy-host: https://aiapp.linwh.top/dist
+
+spring:
+  datasource:
+    url: jdbc:mysql://host.docker.internal:3305/lin_ai_code_mother?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  data:
+    redis:
+      host: host.docker.internal
+      port: 6380
+      password: ${REDIS_PASSWORD}
+
+server:
+  forward-headers-strategy: framework
+
+dubbo:
+  registry:
+    address: nacos://${NACOS_SERVER_ADDR}
+    username: ${NACOS_USERNAME}
+    password: ${NACOS_PASSWORD}
+
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      max-tokens: 8192
+      log-requests: false
+      log-responses: false
+      strict-json-schema: true
+      response-format: json_object
+      max-retries: 3
+    streaming-chat-model:
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      max-tokens: 8192
+      log-requests: false
+      log-responses: false
+    reasoning-streaming-chat-model:
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      max-tokens: 32768
+      temperature: 0.1
+      log-requests: false
+      log-responses: false
+    routing-chat-model:
+      base-url: ${AI_BASE_URL}
+      api-key: ${AI_API_KEY}
+      model-name: ${AI_MODEL_NAME}
+      log-requests: false
+      log-responses: false

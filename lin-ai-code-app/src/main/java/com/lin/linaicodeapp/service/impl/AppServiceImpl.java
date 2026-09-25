@@ -37,16 +37,26 @@ import com.mybatisflex.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -77,6 +87,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private final AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
     private final AppCreationQuotaService appCreationQuotaService;
+
+    @Value("${app.deploy-host:http://localhost}")
+    private String deployHost;
 
     /**
      * 通过对话生成应用代码
@@ -120,9 +133,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @param appId     应用 ID
      * @param loginUser 登录用户
      * @return 可访问的部署url地址
-     */
+    */
     @Override
-    public String deployApp(Long appId, User loginUser) {
+    // ponytail: 单实例部署锁；多实例发布时改为按 deployKey 的分布式锁。
+    public synchronized String deployApp(Long appId, User loginUser) {
         // 1.校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 错误");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
@@ -158,8 +172,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 8.复制文件到部署路径
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
-            FileUtil.copyContent(new File(sourceDirPath), new File(deployDirPath), true);
-        } catch (Exception e) {
+            copyForDeployment(Path.of(sourceDirPath), Path.of(deployDirPath));
+        } catch (IOException e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用部署失败：" + e.getMessage());
         }
         // 9.更新该应用的deployKey,deployedTime,editTime
@@ -172,10 +186,80 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
         // 10.生成可访问的url地址
-        String appDeployUrl = CharSequenceUtil.format("{}/{}/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        String appDeployUrl = buildDeployUrl(deployHost, deployKey);
         // 11.异步生成应用截图（上传到腾讯云COS,并更新数据库封面字段)
         generateAppScreenshotAsync(appId, appDeployUrl);
         return appDeployUrl;
+    }
+
+    static String buildDeployUrl(String deployHost, String deployKey) {
+        return CharSequenceUtil.format("{}/{}/", CharSequenceUtil.removeSuffix(deployHost, "/"), deployKey);
+    }
+
+    static void copyForDeployment(Path source, Path destination) throws IOException {
+        if (!Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("部署源目录无效");
+        }
+        Files.createDirectories(destination.getParent());
+        Path stage = Files.createTempDirectory(destination.getParent(), ".deploy-build-");
+        Path backup = destination.getParent().resolve(".deploy-old-" + UUID.randomUUID());
+        try {
+            Files.walkFileTree(source, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    Files.createDirectories(stage.resolve(source.relativize(dir)));
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    if (!attrs.isRegularFile()) throw new IOException("部署源目录包含符号链接或特殊文件");
+                    Path target = stage.resolve(source.relativize(file));
+                    try (var input = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                        Files.copy(input, target);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            if (Files.getFileAttributeView(stage, java.nio.file.attribute.PosixFileAttributeView.class) != null) {
+                Files.setPosixFilePermissions(stage, PosixFilePermissions.fromString("rwxr-xr-x"));
+            }
+            boolean hadOld = Files.exists(destination, LinkOption.NOFOLLOW_LINKS);
+            if (hadOld) Files.move(destination, backup);
+            try {
+                Files.move(stage, destination);
+            } catch (IOException e) {
+                if (hadOld) Files.move(backup, destination);
+                throw e;
+            }
+            if (hadOld) {
+                try {
+                    deleteTree(backup);
+                } catch (IOException e) {
+                    log.warn("旧部署目录清理失败: {}", e.getMessage());
+                }
+            }
+        } finally {
+            deleteTree(stage);
+        }
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return;
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException error) throws IOException {
+                if (error != null) throw error;
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     /**

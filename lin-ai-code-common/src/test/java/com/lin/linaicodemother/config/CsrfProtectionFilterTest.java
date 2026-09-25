@@ -1,5 +1,6 @@
 package com.lin.linaicodemother.config;
 
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,6 +33,7 @@ class CsrfProtectionFilterTest {
     @Test
     void shouldAllowSameOriginPost() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/app/add");
+        request.setScheme("https");
         request.addHeader("Host", "app.example.com");
         request.addHeader("Origin", "https://app.example.com");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -49,6 +51,42 @@ class CsrfProtectionFilterTest {
         filter.doFilterInternal(request, response, new MockFilterChain());
 
         assertEquals(200, response.getStatus());
+    }
+
+    @Test
+    void shouldRejectCookiePostWithoutOrigin() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/app/add");
+        request.setCookies(new Cookie("SESSION", "session-id"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, new MockFilterChain());
+
+        assertEquals(403, response.getStatus());
+    }
+
+    @Test
+    void shouldAllowSameOriginFetchWithoutOrigin() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/app/add");
+        request.setCookies(new Cookie("SESSION", "session-id"));
+        request.addHeader("Sec-Fetch-Site", "same-origin");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, new MockFilterChain());
+
+        assertEquals(200, response.getStatus());
+    }
+
+    @Test
+    void shouldRejectSameHostWithDifferentScheme() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/app/add");
+        request.setScheme("http");
+        request.addHeader("Host", "app.example.com");
+        request.addHeader("Origin", "https://app.example.com");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, new MockFilterChain());
+
+        assertEquals(403, response.getStatus());
     }
 
     @ParameterizedTest

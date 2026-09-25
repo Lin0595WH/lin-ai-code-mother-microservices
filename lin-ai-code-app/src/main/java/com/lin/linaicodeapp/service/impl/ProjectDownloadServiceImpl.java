@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 
@@ -67,6 +68,7 @@ public class ProjectDownloadServiceImpl implements ProjectDownloadService {
         File projectDir = new File(projectPath);
         ThrowUtils.throwIf(!projectDir.exists(), ErrorCode.PARAMS_ERROR, "项目路径不存在");
         ThrowUtils.throwIf(!projectDir.isDirectory(), ErrorCode.PARAMS_ERROR, "项目路径不是一个目录");
+        ThrowUtils.throwIf(Files.isSymbolicLink(projectDir.toPath()), ErrorCode.PARAMS_ERROR, "项目路径不能是符号链接");
         log.info("开始打包下载项目: {} -> {}.zip", projectPath, downloadFileName);
         // 设置 HTTP 响应头
         response.setStatus(HttpServletResponse.SC_OK);
@@ -96,8 +98,11 @@ public class ProjectDownloadServiceImpl implements ProjectDownloadService {
     private boolean isPathAllowed(Path projectRoot, Path fullPath) {
         // 获取相对路径
         Path relativePath = projectRoot.relativize(fullPath);
+        Path current = projectRoot;
         // 检查路径中的每一部分是否符合要求
         for (Path part : relativePath) {
+            current = current.resolve(part);
+            if (Files.isSymbolicLink(current)) return false;
             String partName = part.toString();
             // 检查是否在忽略名称列表中
             if (IGNORED_NAMES.contains(partName)) {

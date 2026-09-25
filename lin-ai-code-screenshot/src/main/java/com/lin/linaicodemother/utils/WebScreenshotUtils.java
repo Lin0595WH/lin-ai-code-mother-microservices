@@ -121,7 +121,9 @@ public class WebScreenshotUtils {
     private static WebDriver createChromeDriver() {
         WebDriver driver = null;
         try {
-            WebDriverManager.chromedriver().setup();
+            if (CharSequenceUtil.isBlank(System.getProperty("webdriver.chrome.driver"))) {
+                WebDriverManager.chromedriver().setup();
+            }
             driver = new ChromeDriver(createChromeOptions());
             driver.manage().timeouts().pageLoadTimeout(PAGE_LOAD_TIMEOUT);
             return driver;
