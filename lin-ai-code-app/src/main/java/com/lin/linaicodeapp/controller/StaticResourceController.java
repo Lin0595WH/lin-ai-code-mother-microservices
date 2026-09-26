@@ -35,6 +35,99 @@ import java.util.regex.Pattern;
 public class StaticResourceController {
     private static final Pattern ROOT_RELATIVE_HTML_RESOURCE =
             Pattern.compile("((?:src|href)\\s*=\\s*['\"])\\/(?!/)([^'\"]*)(['\"])", Pattern.CASE_INSENSITIVE);
+    private static final String VISUAL_EDITOR_SCRIPT = """
+            <script id="visual-edit-script">
+            (() => {
+              let editing = false;
+              let hovered = null;
+              let selected = null;
+
+              const clearHover = () => {
+                hovered?.classList.remove('edit-hover');
+                hovered = null;
+              };
+              const clearSelection = () => {
+                selected?.classList.remove('edit-selected');
+                selected = null;
+              };
+              const selectorFor = (element) => {
+                const path = [];
+                for (let current = element; current && current !== document.body; current = current.parentElement) {
+                  let selector = current.tagName.toLowerCase();
+                  if (current.id) {
+                    path.unshift(selector + '#' + CSS.escape(current.id));
+                    break;
+                  }
+                  const classes = typeof current.className === 'string'
+                    ? current.className.split(/\\s+/).filter((name) => name && !name.startsWith('edit-'))
+                    : [];
+                  if (classes.length) selector += '.' + classes.map(CSS.escape).join('.');
+                  const siblings = [...(current.parentElement?.children || [])];
+                  selector += ':nth-child(' + (siblings.indexOf(current) + 1) + ')';
+                  path.unshift(selector);
+                }
+                return path.join(' > ');
+              };
+              const selectable = (target) => target instanceof Element
+                && target !== document.body
+                && target !== document.documentElement
+                && !['SCRIPT', 'STYLE'].includes(target.tagName);
+
+              const style = document.createElement('style');
+              style.textContent = `
+                .edit-hover { outline: 2px dashed #1890ff !important; outline-offset: 2px !important; cursor: crosshair !important; }
+                .edit-selected { outline: 3px solid #52c41a !important; outline-offset: 2px !important; }
+              `;
+              document.head.appendChild(style);
+
+              document.addEventListener('mouseover', (event) => {
+                if (!editing || !selectable(event.target) || event.target === selected) return;
+                clearHover();
+                hovered = event.target;
+                hovered.classList.add('edit-hover');
+              }, true);
+              document.addEventListener('mouseout', () => editing && clearHover(), true);
+              document.addEventListener('click', (event) => {
+                if (!editing || !selectable(event.target)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                clearHover();
+                clearSelection();
+                selected = event.target;
+                selected.classList.add('edit-selected');
+                const rect = selected.getBoundingClientRect();
+                window.parent.postMessage({
+                  type: 'ELEMENT_SELECTED',
+                  data: { elementInfo: {
+                    tagName: selected.tagName,
+                    id: selected.id || '',
+                    className: typeof selected.className === 'string' ? selected.className : '',
+                    textContent: (selected.textContent || '').trim().substring(0, 100),
+                    selector: selectorFor(selected),
+                    pagePath: location.search + location.hash,
+                    rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+                  }}
+                }, '*');
+              }, true);
+              window.addEventListener('message', (event) => {
+                if (event.source !== window.parent) return;
+                if (event.data?.type === 'TOGGLE_EDIT_MODE') {
+                  editing = Boolean(event.data.editMode);
+                  if (!editing) {
+                    clearHover();
+                    clearSelection();
+                  }
+                } else if (event.data?.type === 'CLEAR_SELECTION') {
+                  clearSelection();
+                } else if (event.data?.type === 'CLEAR_ALL_EFFECTS') {
+                  editing = false;
+                  clearHover();
+                  clearSelection();
+                }
+              });
+            })();
+            </script>
+            """;
 
     private final AppService appService;
     private final StringRedisTemplate redisTemplate;
@@ -107,8 +200,12 @@ public class StaticResourceController {
             }
 
             Resource body = new FileSystemResource(target);
-            if (type == CodeGenTypeEnum.VUE_PROJECT && target.getFileName().toString().equals("index.html")) {
-                String html = rewriteVueHtmlResources(Files.readString(target), vueRootEntry);
+            if (target.getFileName().toString().equals("index.html")) {
+                String html = Files.readString(target);
+                if (type == CodeGenTypeEnum.VUE_PROJECT) {
+                    html = rewriteVueHtmlResources(html, vueRootEntry);
+                }
+                html = injectVisualEditor(html);
                 body = new org.springframework.core.io.ByteArrayResource(html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } else if (type == CodeGenTypeEnum.VUE_PROJECT && target.toString().endsWith(".css")) {
                 String css = rewriteVueCssResources(Files.readString(target));
@@ -161,6 +258,16 @@ public class StaticResourceController {
         return css.replace("url(/assets/", "url(./").replace("url('/assets/", "url('./")
                 .replace("url(\"/assets/", "url(\"./").replace("url(/", "url(../")
                 .replace("url('/", "url('../").replace("url(\"/", "url(\"../");
+    }
+
+    private String injectVisualEditor(String html) {
+        int bodyEnd = html.length() - 7;
+        while (bodyEnd >= 0 && !html.regionMatches(true, bodyEnd, "</body>", 0, 7)) {
+            bodyEnd--;
+        }
+        return bodyEnd < 0
+                ? html + VISUAL_EDITOR_SCRIPT
+                : html.substring(0, bodyEnd) + VISUAL_EDITOR_SCRIPT + html.substring(bodyEnd);
     }
 
     private Path resolveArtifact(Path root, Path requested) throws IOException {

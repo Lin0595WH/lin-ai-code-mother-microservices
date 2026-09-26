@@ -23,6 +23,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -67,8 +68,11 @@ class StaticResourceControllerTest {
 
         var response = controller.serveStaticResource(key, request("/static/" + key + "/"));
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("<h1>ok</h1>", response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        String previewHtml = response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(previewHtml.startsWith("<h1>ok</h1>"));
+        assertTrue(previewHtml.contains("id=\"visual-edit-script\""));
         assertEquals("nosniff", response.getHeaders().getFirst("X-Content-Type-Options"));
+        assertEquals("sandbox allow-scripts", response.getHeaders().getFirst("Content-Security-Policy"));
         assertEquals(404, controller.serveStaticResource(key, request("/static/" + key + "/application.yml"))
                 .getStatusCode().value());
 
@@ -85,13 +89,17 @@ class StaticResourceControllerTest {
         when(appService.getById(app.getId())).thenReturn(app);
         Path distIndex = outputRoot().resolve(key + "/dist/index.html");
         Files.createDirectories(distIndex.getParent());
-        Files.writeString(distIndex, "<h1>built</h1>");
+        Files.writeString(distIndex, "<body><h1>\u0130built</h1></BODY>");
         Files.writeString(outputRoot().resolve(key + "/package.json"), "{}");
 
         var rootResponse = controller.serveStaticResource(key, request("/static/" + key + "/"));
         assertEquals(200, rootResponse.getStatusCode().value());
         var response = controller.serveStaticResource(key, request("/static/" + key + "/dist/index.html"));
         assertEquals(200, response.getStatusCode().value());
+        String previewHtml = response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(previewHtml.startsWith("<body><h1>\u0130built</h1>"));
+        assertTrue(previewHtml.contains("id=\"visual-edit-script\""));
+        assertTrue(previewHtml.endsWith("</BODY>"));
         assertEquals(404, controller.serveStaticResource(key,
                 request("/static/" + key + "/package.json")).getStatusCode().value());
     }
@@ -118,8 +126,9 @@ class StaticResourceControllerTest {
         indexRequest.setSession(null);
         var response = controller.serveStaticResource(key, indexRequest);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("<script src=\"./assets/app.js\"></script>",
-                response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        String previewHtml = response.getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(previewHtml.startsWith("<script src=\"./assets/app.js\"></script>"));
+        assertTrue(previewHtml.contains("id=\"visual-edit-script\""));
         assertEquals(200, controller.serveStaticResource(key,
                 request("/static/" + key + "/preview/" + token + "/dist/assets/app.js"))
                 .getStatusCode().value());
@@ -130,10 +139,10 @@ class StaticResourceControllerTest {
         assertEquals("image/svg+xml", controller.serveStaticResource(key,
                 request("/static/" + key + "/preview/" + token + "/dist/assets/logo.svg"))
                 .getHeaders().getFirst("Content-Type"));
-        assertEquals("<script src=\"./dist/assets/app.js\"></script>",
-                controller.serveStaticResource(key,
+        assertTrue(controller.serveStaticResource(key,
                         request("/static/" + key + "/preview/" + token + "/"))
-                        .getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+                .getBody().getContentAsString(java.nio.charset.StandardCharsets.UTF_8)
+                .startsWith("<script src=\"./dist/assets/app.js\"></script>"));
     }
 
     private HttpServletRequest request(String path) {
