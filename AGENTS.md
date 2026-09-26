@@ -16,7 +16,7 @@ mvn -pl lin-ai-code-user -am package -DskipTests  # package one service
 mvn clean install -DskipTests            # install artifacts for local startup
 ```
 
-Start MySQL, Redis, and Nacos before launching the Spring Boot main classes in the service modules. Chrome/Chromium is also required by the screenshot service.
+Start MySQL, Redis, and Nacos before launching the Spring Boot main classes in the service modules. App also needs a reachable model API; Screenshot needs Chrome/Chromium and COS; local Vue generation may need Node.js/npm, while production uses the isolated builder container configured through `VUE_BUILDER_URL`.
 
 ## Coding Style & Naming Conventions
 
@@ -28,7 +28,7 @@ Tests use JUnit 5 through `spring-boot-starter-test`, with Mockito for unit isol
 
 ## Configuration and Security
 
-Copy or create ignored `application-local.yml` files for model, database, Redis, Nacos, and COS settings. Never commit API keys, passwords, session credentials, generated `tmp/` output, or local IDE files; use environment-variable overrides where possible.
+Copy or create ignored `application-local.yml` files for model, database, Redis, Nacos, and COS settings. These files are excluded from packaged resources, so running a JAR must pass an explicit `--spring.config.additional-location=file:.../application-local.yml` (activating the `local` profile alone is insufficient). Never commit API keys, passwords, session credentials, generated `tmp/` output, or local IDE files; use environment-variable overrides where possible.
 
 ## Commit and Pull Request Guidelines
 

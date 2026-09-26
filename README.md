@@ -1,6 +1,6 @@
 # Lin AI Code Mother 后端
 
-这是 AI 应用生成平台的 Java 21 多模块后端。用户登录后可创建应用，通过流式对话生成 HTML、多文件或 Vue 项目，预览、部署、下载源码，并为部署结果生成截图封面。Vue 前端位于独立仓库 `lin-ai-code-mother-frontend`。
+这是 AI 应用生成平台的 Java 21 多模块后端。用户登录后可创建应用，通过流式对话生成 HTML、多文件或 Vue 项目，预览、部署、下载源码，并为部署结果生成截图封面；对话页还可在预览中进入编辑模式，选中元素后继续描述修改。Vue 前端位于独立仓库 `lin-ai-code-mother-frontend`。
 
 > 仓库提供三个 Spring Boot 可执行 JAR、生产 Docker Compose、隔离的 Vue 构建容器和 Nginx 配置片段；MySQL、Redis、Nacos、宝塔 Nginx 与 Higress 仍由外部提供。数据库迁移和截图浏览器隔离等事项仍需管理，部署方法见 [deploy/README.md](deploy/README.md)。
 
@@ -59,7 +59,7 @@ export SPRING_DATA_REDIS_HOST='127.0.0.1'
 export SESSION_COOKIE_SECURE=false # 仅本地 HTTP 调试；HTTPS 环境保持 true
 ```
 
-模型配置位于 App 的 `langchain4j.open-ai.*` 属性，截图存储配置位于 Screenshot 的 `cos.client.*` 属性。开发时可在各服务 `src/main/resources/application-local.yml` 放置本地覆盖配置并显式激活 `local` profile。根 POM 已将 `application-local.yml` 和 `.yaml` 排除在构建资源之外；发布前仍应检查 JAR 内容。生产配置写入服务器上受权限保护、未跟踪的 `deploy/config/*/application-prod.yml`，模型请求/响应日志不得记录敏感正文。
+模型配置位于 App 的 `langchain4j.open-ai.*` 属性，截图存储配置位于 Screenshot 的 `cos.client.*` 属性。开发时可在各服务 `src/main/resources/application-local.yml` 放置本地覆盖配置。该文件被 Git 忽略，且根 POM 将它排除在 JAR 外；运行 JAR 时须用 `spring.config.additional-location` 显式加载，仅激活 `local` profile 不会加载它。Nacos 凭据还需通过 `NACOS_USERNAME`、`NACOS_PASSWORD` 环境变量或本地文件中的 `dubbo.registry.username`、`dubbo.registry.password` 提供。生产配置写入服务器上受权限保护、未跟踪的 `deploy/config/*/application-prod.yml`，模型请求/响应日志不得记录敏感正文。
 
 ```bash
 # 在仓库根目录执行完整构建与测试
@@ -68,10 +68,10 @@ mvn clean verify
 # 仅供本地快速打包；发布仍以完整测试为准
 mvn package -DskipTests
 
-# 启动前分别确认本机配置完整
-java -jar lin-ai-code-user/target/lin-ai-code-user-1.0-SNAPSHOT.jar --spring.profiles.active=local
-java -jar lin-ai-code-screenshot/target/lin-ai-code-screenshot-1.0-SNAPSHOT.jar --spring.profiles.active=local
-java -jar lin-ai-code-app/target/lin-ai-code-app-1.0-SNAPSHOT.jar --spring.profiles.active=local
+# 在仓库根目录、三个独立终端中运行；先确认本机配置完整
+java -jar lin-ai-code-user/target/lin-ai-code-user-1.0-SNAPSHOT.jar --spring.profiles.active=local "--spring.config.additional-location=file:$PWD/lin-ai-code-user/src/main/resources/application-local.yml"
+java -jar lin-ai-code-screenshot/target/lin-ai-code-screenshot-1.0-SNAPSHOT.jar --spring.profiles.active=local "--spring.config.additional-location=file:$PWD/lin-ai-code-screenshot/src/main/resources/application-local.yml"
+java -jar lin-ai-code-app/target/lin-ai-code-app-1.0-SNAPSHOT.jar --spring.profiles.active=local "--spring.config.additional-location=file:$PWD/lin-ai-code-app/src/main/resources/application-local.yml"
 ```
 
 上述命令分别在独立终端或进程中运行。若用生产环境变量覆盖全部配置，启动时不应激活 `local`。根 POM 中的 Spring Boot Maven Plugin 已由三个运行模块引用并执行 `repackage`；`lin-ai-code-ai` 等依赖库不应单独 `java -jar`。
@@ -119,9 +119,11 @@ curl -N -b cookies.txt -H 'Origin: http://localhost:8125' -H 'Accept: text/event
 
 生成接口返回 SSE：普通分片的 `data` 为包含 `d` 字段的 JSON，正常结束为 `done` 事件，业务错误可能以 `business-error` 事件返回。前端不能仅以 HTTP 200 判断生成成功。
 
+对话页的可视化编辑依赖预览资源：App 服务返回 `index.html` 时注入元素选择脚本，iframe 通过 `postMessage` 回传所选元素的标签、选择器和当前文本；预览继续使用 `Content-Security-Policy: sandbox allow-scripts`，不授予生成页面 `allow-same-origin` 权限。前端会把选中元素信息附加到下一次生成请求，未进入编辑模式时预览交互保持正常。
+
 ## 生成文件与部署边界
 
-- `tmp/code_output/{codeGenType}_{appId}` 保存生成源码；Vue 模式由 AI 文件工具写入，生产环境交给独立 Vue 构建容器生成 `dist`，本地开发可调用本机 npm。
+- `tmp/code_output/{codeGenType}_{appId}` 保存生成源码；Vue 模式由 AI 文件工具写入，本地 `local/dev` 环境可调用本机 npm，生产环境须配置 `VUE_BUILDER_URL` 使用独立 Vue 构建容器生成 `dist`。
 - `tmp/code_deploy/{deployKey}` 保存对外发布的静态文件；Vue 部署时会再次构建并复制 `dist`。
 - 两个根目录目前由 `System.getProperty("user.dir")` 决定。不同工作目录启动会读写不同位置；多实例也没有共享产物机制。
 - 返回的部署地址由 `app.deploy-host` 配置；生产示例使用 `https://aiapp.linwh.top/dist`，与宝塔 Nginx 的 `/dist/` 映射对应。
