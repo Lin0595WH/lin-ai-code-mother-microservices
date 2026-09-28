@@ -72,7 +72,7 @@ class StaticResourceControllerTest {
         assertTrue(previewHtml.startsWith("<h1>ok</h1>"));
         assertTrue(previewHtml.contains("id=\"visual-edit-script\""));
         assertEquals("nosniff", response.getHeaders().getFirst("X-Content-Type-Options"));
-        assertEquals("sandbox allow-scripts", response.getHeaders().getFirst("Content-Security-Policy"));
+        assertEquals(null, response.getHeaders().getFirst("Content-Security-Policy"));
         assertEquals(404, controller.serveStaticResource(key, request("/static/" + key + "/application.yml"))
                 .getStatusCode().value());
 

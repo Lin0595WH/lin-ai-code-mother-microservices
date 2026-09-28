@@ -213,7 +213,6 @@ public class StaticResourceController {
             }
             return ResponseEntity.ok().header(HttpHeaders.CONTENT_TYPE, getContentType(target))
                     .header("X-Content-Type-Options", "nosniff")
-                    .header("Content-Security-Policy", "sandbox allow-scripts")
                     .header("Referrer-Policy", "no-referrer").body(body);
         } catch (NumberFormatException | IOException e) {
             return ResponseEntity.notFound().build();
